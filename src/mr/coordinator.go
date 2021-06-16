@@ -5,11 +5,20 @@ import "net"
 import "os"
 import "net/rpc"
 import "net/http"
+import "sync"
 
+
+type Task struct {
+	inputs []string
+	status int  // 0 for initial state, 1 for running, 2 for finished
+	outputs []string
+}
 
 type Coordinator struct {
 	// Your definitions here.
-
+	mapTasks []Task
+	reduceTasks []Task
+	mu sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -46,7 +55,8 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	ret := false
+	//ret := false
+	ret := true
 
 	// Your code here.
 
@@ -60,9 +70,30 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+	c := Coordinator{
+		mapTasks: make([]Task, len(files)),
+		reduceTasks: make([]Task, nReduce),
+	}
 
 	// Your code here.
+	c.mu.Lock()
+	for i, file := range files {
+		task := Task{
+			inputs: []string{file},
+			status: 0,
+			outputs: make([]string, nReduce),
+		}
+		c.mapTasks[i] = task
+	}
+	for i := 0; i < nReduce; i++ {
+		task := Task{
+			inputs: make([]string, len(files)),
+			status: 0,
+			outputs: make([]string, 1),
+		}
+		c.reduceTasks[i] = task
+	}
+	c.mu.Unlock()
 
 
 	c.server()

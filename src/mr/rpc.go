@@ -24,6 +24,25 @@ type ExampleReply struct {
 
 // Add your RPC definitions here.
 
+type AskForWork struct {}
+
+type Work struct {
+	workType int  // 0 for "map", 1 for "reduce", -1 for no work to do
+	inputs []string
+	id int
+	nReduce int
+}
+
+type HandoverWork struct {
+	outputs []string
+	id int
+	workType int
+}
+
+type HandoverAck struct {
+	received bool
+}
+
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.
