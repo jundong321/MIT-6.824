@@ -88,16 +88,15 @@ func Worker(mapf func(string, string) []KeyValue,
 				for _, kv := range mapf(filename, string(content)) {
 					mapId := ihash(kv.Key) % work.NReduce
 					filename = "mr-" + strconv.Itoa(work.Id) + "-" + strconv.Itoa(mapId)
-					outputFile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE, 0666)
+					outputFile, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
 					if err != nil {
 						log.Fatalf("cannot open %v", filename)
 					}
 
 					enc := json.NewEncoder(outputFile)
-					fmt.Println("%T", kv)
 					err = enc.Encode(&kv)
 					if err != nil {
-						log.Fatalf("Failed to write %v to %v", kv, filename)
+						log.Fatalf("Failed to write %v to %v cause %v", kv, filename, err)
 					}
 					outputs[mapId] = filename
 
