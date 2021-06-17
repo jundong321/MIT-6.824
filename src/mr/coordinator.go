@@ -7,12 +7,14 @@ import "net/rpc"
 import "net/http"
 import "sync"
 import "fmt"
+import "time"
 
 
 type Task struct {
 	inputs []string
 	status int  // 0 for initial state, 1 for running, 2 for finished
 	outputs []string
+	timestamp time.Time  // timestamp of the status
 }
 
 type Coordinator struct {
@@ -37,6 +39,7 @@ func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
 			reply.Id = id
 			reply.NReduce = len(c.reduceTasks)
 			c.mapTasks[id].status = 1
+			c.mapTasks[id].timestamp = time.Now()
 			return nil
 		}
 		if task.status == 1 {
@@ -52,6 +55,7 @@ func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
 				reply.Id = id
 				reply.NReduce = len(c.reduceTasks)
 				c.reduceTasks[id].status = 1
+				c.reduceTasks[id].timestamp = time.Now()
 				return nil
 			}
 		}
@@ -119,7 +123,17 @@ func (c *Coordinator) Done() bool {
 	// Your code here.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, task := range c.reduceTasks {
+	timeout, _ := time.ParseDuration("10s")
+	current := time.Now()
+	for id, task := range c.mapTasks {
+		if task.status == 1 && current.Sub(task.timestamp) > timeout {
+			c.mapTasks[id].status = 0
+		}
+	}
+	for id, task := range c.reduceTasks {
+		if task.status == 1 && current.Sub(task.timestamp) > timeout {
+			c.reduceTasks[id].status = 0
+		}
 		if task.status != 2 {
 			ret = false
 		}
