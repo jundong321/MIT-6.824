@@ -22,6 +22,58 @@ type Coordinator struct {
 }
 
 // Your code here -- RPC handlers for the worker to call.
+func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	canReduce := true
+	for id, task := range c.mapTasks {
+		if task.status == 0 {
+			reply.workType = 0
+			reply.inputs = task.inputs
+			reply.id = id
+			reply.nReduce = len(c.reduceTasks)
+			task.status = 1
+			return nil
+		}
+		if task.status == 1 {
+			canReduce = false
+		}
+	}
+
+	if canReduce {
+		for id, task := range c.reduceTasks {
+			if task.status == 0 {
+				reply.workType = 0
+				reply.inputs = task.inputs
+				reply.id = id
+				reply.nReduce = len(c.reduceTasks)
+				task.status = 1
+				return nil
+			}
+		}
+	}
+
+	reply.workType = -1
+	return nil
+}
+
+func (c *Coordinator) ResultHandler(args *HandoverWork, reply *HandoverAck) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	switch args.workType {
+	case 0:
+		c.mapTasks[args.id].outputs = args.outputs
+		c.mapTasks[args.id].status = 2
+	case 1:
+		c.reduceTasks[args.id].outputs = args.outputs
+		c.reduceTasks[args.id].status = 2
+	}
+
+	reply.received = true
+	return nil
+}
 
 //
 // an example RPC handler.
@@ -55,10 +107,14 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	//ret := false
 	ret := true
 
 	// Your code here.
+	for _, task := range c.reduceTasks {
+		if task.status != 2 {
+			ret = false
+		}
+	}
 
 
 	return ret

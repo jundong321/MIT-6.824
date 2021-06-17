@@ -7,6 +7,7 @@ import "net/rpc"
 import "hash/fnv"
 import "time"
 import "encoding/json"
+import "io/ioutil"
 
 
 //
@@ -28,7 +29,7 @@ func ihash(key string) int {
 }
 
 
-func SendResult(outputs []string, id int, workType int) {
+func SendResult(outputs []string, id int, workType int) (HandoverAck, bool) {
 	args := HandoverWork{}
 
 	args.outputs = outputs
@@ -56,14 +57,13 @@ func Worker(mapf func(string, string) []KeyValue,
 
 
 	// while coordinator is alive.
-	for work, res := CallForWork(); res == True {
-		fmt.Printf("working on work %v\n", work)
+	for work, res := CallForWork(); res == true; {
 		switch work.workType {
 		case -1:
 			time.Sleep(time.Second)
 		case 0:
 			// map
-			for filename := range work.inputs {
+			for _, filename := range work.inputs {
 				file, err := os.Open(filename)
 				if err != nil {
 					log.Fatalf("cannot open %v", filename)
@@ -75,13 +75,19 @@ func Worker(mapf func(string, string) []KeyValue,
 				file.Close()
 
 				outputs := make([]string, work.nReduce)
-				for _, kv := mapf(filename, string(content)) {
-					mapId = ihash(kv.Key) % work.nReduce
-					filename = "mr-" + work.id + "-" + mapId
-					outputFile := os.Open(filename, os.O_APPEND|os.O_CREATE)
+				for _, kv := range mapf(filename, string(content)) {
+					mapId := ihash(kv.Key) % work.nReduce
+					filename = "mr-" + string(work.id) + "-" + string(mapId)
+					outputFile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE, 0222)
+					if err != nil {
+						log.Fatalf("cannot open %v", filename)
+					}
+
 					enc := json.NewEncoder(outputFile)
-					err := enc.Encode(&kv)
+					err = enc.Encode(&kv)
 					outputs[mapId] = filename
+
+					outputFile.Close()
 				}
 				fmt.Printf("map produced outputs: %v\n", outputs)
 
@@ -89,8 +95,8 @@ func Worker(mapf func(string, string) []KeyValue,
 			}
 		case 1:
 			// reduce
-			intermediate := []mr.KeyValue{}
-			for filename := range work.inputs {
+			intermediate := []KeyValue{}
+			for _, filename := range work.inputs {
 				file, err := os.Open(filename)
 				if err != nil {
 					log.Fatalf("cannot open %v", filename)
@@ -106,7 +112,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				file.Close()
 			}
 
-			oname := "mr-out-" + work.id
+			oname := "mr-out-" + string(work.id)
 			ofile, _ := os.Create(oname)
 
 			i := 0
