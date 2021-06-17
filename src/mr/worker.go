@@ -9,6 +9,7 @@ import "time"
 import "encoding/json"
 import "io/ioutil"
 import "strconv"
+import "sort"
 
 
 //
@@ -18,6 +19,14 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
+
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 //
 // use ihash(key) % NReduce to choose the reduce
@@ -111,6 +120,9 @@ func Worker(mapf func(string, string) []KeyValue,
 			fmt.Println("Doing reduce job: ", work)
 			intermediate := []KeyValue{}
 			for _, filename := range work.Inputs {
+				if filename == "" {
+					continue
+				}
 				file, err := os.Open(filename)
 				if err != nil {
 					log.Fatalf("cannot open %v", filename)
@@ -125,6 +137,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				}
 				file.Close()
 			}
+			sort.Sort(ByKey(intermediate))
 
 			oname := "mr-out-" + strconv.Itoa(work.Id)
 			ofile, _ := os.Create(oname)
