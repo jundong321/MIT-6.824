@@ -21,13 +21,13 @@ type Coordinator struct {
 	// Your definitions here.
 	mapTasks []Task
 	reduceTasks []Task
-	mu sync.Mutex
 }
+var mu = sync.Mutex{}
 
 // Your code here -- RPC handlers for the worker to call.
 func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 
 	fmt.Println("Received work request")
 	fmt.Println("Current coordinator state: ", c)
@@ -67,8 +67,8 @@ func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
 
 func (c *Coordinator) ResultHandler(args *HandoverWork, reply *HandoverAck) error {
 	fmt.Println("Received result ", args)
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 
 	switch args.WorkType {
 	case 0:
@@ -121,8 +121,8 @@ func (c *Coordinator) Done() bool {
 	ret := true
 
 	// Your code here.
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 	timeout, _ := time.ParseDuration("10s")
 	current := time.Now()
 	for id, task := range c.mapTasks {

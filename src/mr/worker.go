@@ -68,7 +68,6 @@ func Worker(mapf func(string, string) []KeyValue,
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()
 
-
 	for {
 		// while coordinator is alive.
 		work, alive := CallForWork()
