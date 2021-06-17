@@ -27,20 +27,20 @@ type ExampleReply struct {
 type AskForWork struct {}
 
 type Work struct {
-	workType int  // 0 for "map", 1 for "reduce", -1 for no work to do
-	inputs []string
-	id int
-	nReduce int
+	WorkType int  // 0 for "map", 1 for "reduce", -1 for no work to do
+	Inputs []string
+	Id int
+	NReduce int
 }
 
 type HandoverWork struct {
-	outputs []string
-	id int
-	workType int
+	Outputs []string
+	Id int
+	WorkType int
 }
 
 type HandoverAck struct {
-	received bool
+	Received bool
 }
 
 

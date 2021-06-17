@@ -8,6 +8,7 @@ import "hash/fnv"
 import "time"
 import "encoding/json"
 import "io/ioutil"
+import "strconv"
 
 
 //
@@ -30,11 +31,14 @@ func ihash(key string) int {
 
 
 func SendResult(outputs []string, id int, workType int) (HandoverAck, bool) {
+
 	args := HandoverWork{}
 
-	args.outputs = outputs
-	args.id = id
-	args.workType = workType
+	args.Outputs = outputs
+	args.Id = id
+	args.WorkType = workType
+
+	fmt.Println("Sending results ", args)
 
 	reply := HandoverAck{}
 
@@ -56,14 +60,20 @@ func Worker(mapf func(string, string) []KeyValue,
 	// CallExample()
 
 
-	// while coordinator is alive.
-	for work, res := CallForWork(); res == true; {
-		switch work.workType {
+	for {
+		// while coordinator is alive.
+		work, alive := CallForWork()
+		if !alive {
+			break
+		}
+
+		switch work.WorkType {
 		case -1:
 			time.Sleep(time.Second)
 		case 0:
 			// map
-			for _, filename := range work.inputs {
+			fmt.Println("Doing map job: ", work)
+			for _, filename := range work.Inputs {
 				file, err := os.Open(filename)
 				if err != nil {
 					log.Fatalf("cannot open %v", filename)
@@ -74,29 +84,34 @@ func Worker(mapf func(string, string) []KeyValue,
 				}
 				file.Close()
 
-				outputs := make([]string, work.nReduce)
+				outputs := make([]string, work.NReduce)
 				for _, kv := range mapf(filename, string(content)) {
-					mapId := ihash(kv.Key) % work.nReduce
-					filename = "mr-" + string(work.id) + "-" + string(mapId)
-					outputFile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE, 0222)
+					mapId := ihash(kv.Key) % work.NReduce
+					filename = "mr-" + strconv.Itoa(work.Id) + "-" + strconv.Itoa(mapId)
+					outputFile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE, 0666)
 					if err != nil {
 						log.Fatalf("cannot open %v", filename)
 					}
 
 					enc := json.NewEncoder(outputFile)
+					fmt.Println("%T", kv)
 					err = enc.Encode(&kv)
+					if err != nil {
+						log.Fatalf("Failed to write %v to %v", kv, filename)
+					}
 					outputs[mapId] = filename
 
 					outputFile.Close()
 				}
-				fmt.Printf("map produced outputs: %v\n", outputs)
+				fmt.Println("map produced outputs: ", outputs)
 
-				SendResult(outputs, work.id, work.workType)
+				SendResult(outputs, work.Id, work.WorkType)
 			}
 		case 1:
 			// reduce
+			fmt.Println("Doing reduce job: ", work)
 			intermediate := []KeyValue{}
-			for _, filename := range work.inputs {
+			for _, filename := range work.Inputs {
 				file, err := os.Open(filename)
 				if err != nil {
 					log.Fatalf("cannot open %v", filename)
@@ -112,7 +127,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				file.Close()
 			}
 
-			oname := "mr-out-" + string(work.id)
+			oname := "mr-out-" + strconv.Itoa(work.Id)
 			ofile, _ := os.Create(oname)
 
 			i := 0
@@ -136,19 +151,23 @@ func Worker(mapf func(string, string) []KeyValue,
 			ofile.Close()
 
 			outputs := []string{oname}
-			SendResult(outputs, work.id, work.workType)
+			fmt.Println("reduce produced outputs: ", outputs)
+			SendResult(outputs, work.Id, work.WorkType)
 		}
 	}
 }
 
 
 func CallForWork() (Work, bool)  {
+	fmt.Println("Asking for more work")
+
 	args := AskForWork{}
 
 	reply := Work{}
 
 	res := call("Coordinator.WorkHandler", &args, &reply)
 
+	fmt.Println("Got work ", reply)
 	return reply, res
 }
 

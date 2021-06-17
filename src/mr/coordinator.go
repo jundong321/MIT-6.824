@@ -6,6 +6,7 @@ import "os"
 import "net/rpc"
 import "net/http"
 import "sync"
+import "fmt"
 
 
 type Task struct {
@@ -26,14 +27,16 @@ func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	fmt.Println("Received work request")
+	fmt.Println("Current coordinator state: ", c)
 	canReduce := true
 	for id, task := range c.mapTasks {
 		if task.status == 0 {
-			reply.workType = 0
-			reply.inputs = task.inputs
-			reply.id = id
-			reply.nReduce = len(c.reduceTasks)
-			task.status = 1
+			reply.WorkType = 0
+			reply.Inputs = task.inputs
+			reply.Id = id
+			reply.NReduce = len(c.reduceTasks)
+			c.mapTasks[id].status = 1
 			return nil
 		}
 		if task.status == 1 {
@@ -44,34 +47,38 @@ func (c *Coordinator) WorkHandler(args *AskForWork, reply *Work) error {
 	if canReduce {
 		for id, task := range c.reduceTasks {
 			if task.status == 0 {
-				reply.workType = 0
-				reply.inputs = task.inputs
-				reply.id = id
-				reply.nReduce = len(c.reduceTasks)
-				task.status = 1
+				reply.WorkType = 1
+				reply.Inputs = task.inputs
+				reply.Id = id
+				reply.NReduce = len(c.reduceTasks)
+				c.reduceTasks[id].status = 1
 				return nil
 			}
 		}
 	}
 
-	reply.workType = -1
+	reply.WorkType = -1
 	return nil
 }
 
 func (c *Coordinator) ResultHandler(args *HandoverWork, reply *HandoverAck) error {
+	fmt.Println("Received result ", args)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	switch args.workType {
+	switch args.WorkType {
 	case 0:
-		c.mapTasks[args.id].outputs = args.outputs
-		c.mapTasks[args.id].status = 2
+		c.mapTasks[args.Id].outputs = args.Outputs
+		c.mapTasks[args.Id].status = 2
+		for id, filename := range args.Outputs {
+			c.reduceTasks[id].inputs = append(c.reduceTasks[id].inputs, filename)
+		}
 	case 1:
-		c.reduceTasks[args.id].outputs = args.outputs
-		c.reduceTasks[args.id].status = 2
+		c.reduceTasks[args.Id].outputs = args.Outputs
+		c.reduceTasks[args.Id].status = 2
 	}
 
-	reply.received = true
+	reply.Received = true
 	return nil
 }
 
@@ -110,6 +117,8 @@ func (c *Coordinator) Done() bool {
 	ret := true
 
 	// Your code here.
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, task := range c.reduceTasks {
 		if task.status != 2 {
 			ret = false
@@ -132,24 +141,23 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	}
 
 	// Your code here.
-	c.mu.Lock()
 	for i, file := range files {
 		task := Task{
 			inputs: []string{file},
 			status: 0,
-			outputs: make([]string, nReduce),
+			outputs: make([]string, 0),
 		}
 		c.mapTasks[i] = task
 	}
 	for i := 0; i < nReduce; i++ {
 		task := Task{
-			inputs: make([]string, len(files)),
+			inputs: make([]string, 0),
 			status: 0,
-			outputs: make([]string, 1),
+			outputs: make([]string, 0),
 		}
 		c.reduceTasks[i] = task
 	}
-	c.mu.Unlock()
+	fmt.Println("Initialized coordinator: ", c)
 
 
 	c.server()
