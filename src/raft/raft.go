@@ -64,6 +64,18 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+	isLeader    bool  // if this server is a leader
+	active      bool  // if its leader is active
+
+	currentTerm int
+	votedFor    int
+        // log entries
+
+	commitIndex int
+	lastApplied int
+
+	// nextIndex
+	// matchIndex
 }
 
 // return currentTerm and whether this server
@@ -72,7 +84,13 @@ func (rf *Raft) GetState() (int, bool) {
 
 	var term int
 	var isleader bool
+
 	// Your code here (2A).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	term = rf.currentTerm
+	isleader = rf.isLeader
+
 	return term, isleader
 }
 
@@ -143,6 +161,10 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term         int  // candidate's term
+	CandidateId  int  // candidate requesting vote
+	LastLogIndex int  // index of candidate's last log entry
+	LastLogTerm  int  // term of candidate's last log entry
 }
 
 //
@@ -151,6 +173,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Term int          // currentTerm, for candidate to update itself
+	VoteGranted bool  // true means candidate received vote
 }
 
 //
@@ -158,6 +182,20 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	reply.Term = rf.currentTerm
+	if args.Term < rf.currentTerm {
+		reply.VoteGranted = false
+	} else {
+		if (rf.votedFor == nil or rf.votedFor == args.CandidateId) {  // TODO: add log up-to-date check
+			reply.VoteGranted = true
+			rf.votedFor = args.CandidateId
+		} else {
+			reply.VoteGranted = false
+		}
+	}
 }
 
 //
@@ -249,6 +287,30 @@ func (rf *Raft) ticker() {
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
+
+		rf.mu.Lock()
+
+		if rf.isLeader {
+			// do leader work, send heartbeat
+
+		} else if rf.active {
+			// active follower, do follower work
+
+		} else if rf.votedFor == nil {
+			// become a candidate
+		}
+
+		// reset active to False to check heartbeats
+		rf.active = False
+
+		rf.mu.Unlock()
+
+		// Sleep randomly
+
+		rf.mu.Lock()
+		// reset votedFor at end of this election
+		rf.votedFor = nil
+		rf.mu.Unlock()
 
 	}
 }
