@@ -24,6 +24,8 @@ import (
 
 //	"6.824/labgob"
 	"6.824/labrpc"
+
+	"time"
 )
 
 
@@ -64,8 +66,8 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	isLeader    bool  // if this server is a leader
-	active      bool  // if its leader is active
+	state       int  // 0 = leader, 1 = candidate, 2 = follower
+	lastActive  time.Time  // time of last active message was received
 
 	currentTerm int
 	votedFor    int
@@ -76,7 +78,12 @@ type Raft struct {
 
 	// nextIndex
 	// matchIndex
+
+	electionTimeout time.Duration  // TODO: make random
+	sleepTime       time.Duration  // duration for each periodic iteration
 }
+
+const timeout, _ := time.ParseDuration("10s")
 
 // return currentTerm and whether this server
 // believes it is the leader.
@@ -89,7 +96,7 @@ func (rf *Raft) GetState() (int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	term = rf.currentTerm
-	isleader = rf.isLeader
+	isleader = (rf.state == 0)
 
 	return term, isleader
 }
@@ -279,6 +286,13 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+
+// This go routine tries to step up and become a leader.
+// It sends RPC calls to other servers and wait for them.
+// After majority has reached, check if term is still good.
+func (rf *Raft) requestVotes() {
+}
+
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
 func (rf *Raft) ticker() {
@@ -289,29 +303,23 @@ func (rf *Raft) ticker() {
 		// time.Sleep().
 
 		rf.mu.Lock()
-
-		if rf.isLeader {
+		if rf.state == 0 {
 			// do leader work, send heartbeat
 
-		} else if rf.active {
-			// active follower, do follower work
-
-		} else if rf.votedFor == nil {
-			// become a candidate
+		} else if state == 1 {
+			if current := time.Now(); current.Sub(rf.lastActive) > rf.electionTimeout {
+				// become a candidate
+				fmt.Println("Server ", rf.me, " wants to become a leader")
+				rf.currentTerm += 1
+				go rf.requestVotes()
+				rf.lastActive = time.Now()
+			}
+		} else {
+			panic("Illegal raft state", rf.state)
 		}
-
-		// reset active to False to check heartbeats
-		rf.active = False
-
 		rf.mu.Unlock()
 
-		// Sleep randomly
-
-		rf.mu.Lock()
-		// reset votedFor at end of this election
-		rf.votedFor = nil
-		rf.mu.Unlock()
-
+		time.Sleep(rf.sleepTime)
 	}
 }
 
